@@ -1,4 +1,5 @@
-from distance_bearing import haversine, calculate_bearing
+from .distance_bearing import haversine, calculate_bearing
+
 
 def decide_movement(current_heading, target_bearing, threshold=10):
     """
