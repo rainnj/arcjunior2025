@@ -12,7 +12,7 @@ def get_current_heading(prev_lat, prev_lon, curr_lat, curr_lon):
     return calculate_bearing(prev_lat, prev_lon, curr_lat, curr_lon)
 
 def run_simulation(simulated_positions, target_waypoints):
-    print("🧪 Simulation Mode: Starting...\n")
+    print("🚀 Starting Simulation Mode...\n")
     waypoint_index = 0
 
     for i in range(1, len(simulated_positions)):
@@ -52,7 +52,7 @@ def run_live():
         print("No GPS waypoints found.")
         return
 
-    print("🛰️ Live GPS Mode: Starting...\n")
+    print("🛰️ Starting Live GPS Mode...\n")
 
     waypoint_index = 0
     prev_lat, prev_lon = None, None
@@ -97,6 +97,7 @@ def run_live():
             break
 
 def main():
+    print("🚀 Starting main()")
     if len(sys.argv) > 1 and sys.argv[1] == "--simulate":
         simulated_path = load_gps_waypoints('simulated-path.txt')
         waypoints = load_gps_waypoints('sample-gpslocations.txt')
@@ -106,4 +107,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
