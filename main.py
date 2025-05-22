@@ -1,14 +1,17 @@
 import time
 import sys
 
-
+# ✅ Import from navigation folder
 from navigation.distance_bearing import haversine, calculate_bearing
 from navigation.headinglogic import decide_movement
 
+print("🟢 Python is running main.py")
 
 def load_gps_waypoints(filename):
+    print(f"📄 Loading GPS file: {filename}")
     with open(filename, 'r') as file:
         lines = file.readlines()
+    print(f"✅ Loaded {len(lines)} lines from {filename}")
     return [tuple(map(float, line.strip().split(','))) for line in lines]
 
 def get_current_heading(prev_lat, prev_lon, curr_lat, curr_lon):
@@ -19,6 +22,7 @@ def run_simulation(simulated_positions, target_waypoints):
     print(f"Simulated positions: {len(simulated_positions)}")
     print(f"Target waypoints: {len(target_waypoints)}")
 
+    waypoint_index = 0
 
     for i in range(1, len(simulated_positions)):
         curr_lat, curr_lon = simulated_positions[i]
@@ -108,13 +112,12 @@ def main():
         print("✅ Simulation mode selected")
         simulated_path = load_gps_waypoints('gpslocations/simulated-path.txt')
         waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')
-        print(f"Simulated path points: {len(simulated_path)}")
-        print(f"Target waypoints: {len(waypoints)}")
+        print(f"📍 Simulated path count: {len(simulated_path)}")
+        print(f"📍 Waypoints count: {len(waypoints)}")
         run_simulation(simulated_path, waypoints)
     else:
         print("✅ Live GPS mode selected")
         run_live()
-
 
 if __name__ == "__main__":
     main()
