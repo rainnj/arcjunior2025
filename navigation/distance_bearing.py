@@ -14,9 +14,9 @@ def calculate_bearing(lat1, lon1, lat2, lon2):
   lat1 = radians(lat1)
   lat2 = radians(lat2)
 
-x = sin(dlon) * cos(lat2)
-y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
+  x = sin(dlon) * cos(lat2)
+  y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
 
-initial_bearing = atan2(x,y)
-compass_bearing = (degrees(initial_bearing) + 360) % 360
-return compass_bearing
+  initial_bearing = atan2(x,y)
+  compass_bearing = (degrees(initial_bearing) + 360) % 360
+  return compass_bearing
