@@ -49,14 +49,11 @@ def parse_line_to_latlon(line):
 
     raise ValueError(f"Cannot parse GPS line: {line}")
 
-# Example usage
-sample_inputs = [
-    "24.774200,46.738500",                       # Decimal degrees
-    "24°46'27\"N 46°44'18\"E",                   # DMS
-    "24°46.450'N, 46°44.316'E",                  # DDM
-    "X=24.774200 Y=46.738500 Z=0",               # XYZ
-    "lat=24.7742 lon=46.7385",                   # Key-value
-]
+# Read lines from a .txt file
+with open("sample-gpslocations.txt", "r") as file:
+    sample_inputs = file.readlines()
+
+
 
 for line in sample_inputs:
     try:
