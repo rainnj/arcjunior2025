@@ -1,5 +1,7 @@
 import time
 import sys
+sys.path.append('./navigation')  # ✅ Allows importing from /navigation
+
 from distance_bearing import haversine, calculate_bearing
 from headinglogic import decide_movement
 
@@ -46,7 +48,7 @@ def run_simulation(simulated_positions, target_waypoints):
 def run_live():
     import gpsd
     gpsd.connect()
-    waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ Updated path
+    waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ fixed path
 
     if not waypoints:
         print("No GPS waypoints found.")
@@ -99,8 +101,8 @@ def run_live():
 def main():
     print("🚀 Starting main()")
     if len(sys.argv) > 1 and sys.argv[1] == "--simulate":
-        simulated_path = load_gps_waypoints('gpslocations/simulated-path.txt')  # ✅ Updated path
-        waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ Updated path
+        simulated_path = load_gps_waypoints('gpslocations/simulated-path.txt')  # ✅ fixed path
+        waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ fixed path
         run_simulation(simulated_path, waypoints)
     else:
         run_live()
