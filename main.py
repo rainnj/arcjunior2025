@@ -15,8 +15,10 @@ def get_current_heading(prev_lat, prev_lon, curr_lat, curr_lon):
     return calculate_bearing(prev_lat, prev_lon, curr_lat, curr_lon)
 
 def run_simulation(simulated_positions, target_waypoints):
-    print("🚀 Starting Simulation Mode...\n")
-    waypoint_index = 0
+    print("🚀 Entered run_simulation()")
+    print(f"Simulated positions: {len(simulated_positions)}")
+    print(f"Target waypoints: {len(target_waypoints)}")
+
 
     for i in range(1, len(simulated_positions)):
         curr_lat, curr_lon = simulated_positions[i]
