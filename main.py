@@ -100,13 +100,19 @@ def run_live():
             break
 
 def main():
-    print("🚀 Starting main()")
+    print("✅ main() called")
+
     if len(sys.argv) > 1 and sys.argv[1] == "--simulate":
-        simulated_path = load_gps_waypoints('gpslocations/simulated-path.txt')  # ✅ fixed path
-        waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ fixed path
+        print("✅ Simulation mode selected")
+        simulated_path = load_gps_waypoints('gpslocations/simulated-path.txt')
+        waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')
+        print(f"Simulated path points: {len(simulated_path)}")
+        print(f"Target waypoints: {len(waypoints)}")
         run_simulation(simulated_path, waypoints)
     else:
+        print("✅ Live GPS mode selected")
         run_live()
+
 
 if __name__ == "__main__":
     main()
