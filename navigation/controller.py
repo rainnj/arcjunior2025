@@ -46,7 +46,7 @@ def run_simulation(simulated_positions, target_waypoints):
 def run_live():
     import gpsd
     gpsd.connect()
-    waypoints = load_gps_waypoints('sample-gpslocations.txt')
+    waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ Updated path
 
     if not waypoints:
         print("No GPS waypoints found.")
@@ -99,8 +99,8 @@ def run_live():
 def main():
     print("🚀 Starting main()")
     if len(sys.argv) > 1 and sys.argv[1] == "--simulate":
-        simulated_path = load_gps_waypoints('simulated-path.txt')
-        waypoints = load_gps_waypoints('sample-gpslocations.txt')
+        simulated_path = load_gps_waypoints('gpslocations/simulated-path.txt')  # ✅ Updated path
+        waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ Updated path
         run_simulation(simulated_path, waypoints)
     else:
         run_live()
