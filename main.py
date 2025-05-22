@@ -1,67 +1,32 @@
 import time
-import sys
+import gpsd
 
-# ✅ Import from navigation folder
 from navigation.distance_bearing import haversine, calculate_bearing
 from navigation.headinglogic import decide_movement
 
-print("🟢 Python is running main.py")
-
 def load_gps_waypoints(filename):
-    print(f"📄 Loading GPS file: {filename}")
     with open(filename, 'r') as file:
-        lines = file.readlines()
-    print(f"✅ Loaded {len(lines)} lines from {filename}")
-    return [tuple(map(float, line.strip().split(','))) for line in lines]
+        return [tuple(map(float, line.strip().split(','))) for line in file]
 
 def get_current_heading(prev_lat, prev_lon, curr_lat, curr_lon):
     return calculate_bearing(prev_lat, prev_lon, curr_lat, curr_lon)
 
-def run_simulation(simulated_positions, target_waypoints):
-    print("🚀 Entered run_simulation()")
-    print(f"Simulated positions: {len(simulated_positions)}")
-    print(f"Target waypoints: {len(target_waypoints)}")
-
-    waypoint_index = 0
-
-    for i in range(1, len(simulated_positions)):
-        curr_lat, curr_lon = simulated_positions[i]
-        prev_lat, prev_lon = simulated_positions[i - 1]
-
-        if waypoint_index >= len(target_waypoints):
-            print("✅ All waypoints reached!")
-            break
-
-        target_lat, target_lon = target_waypoints[waypoint_index]
-        distance = haversine(curr_lat, curr_lon, target_lat, target_lon)
-        current_heading = get_current_heading(prev_lat, prev_lon, curr_lat, curr_lon)
-        target_bearing = calculate_bearing(curr_lat, curr_lon, target_lat, target_lon)
-        decision = decide_movement(current_heading, target_bearing)
-
-        print(f"[Simulated GPS] Position: ({curr_lat:.6f}, {curr_lon:.6f})")
-        print(f"Target Waypoint:  ({target_lat:.6f}, {target_lon:.6f})")
-        print(f"Distance to Target: {distance:.2f} m")
-        print(f"Current Heading:    {current_heading:.2f}°")
-        print(f"Target Bearing:     {target_bearing:.2f}°")
-        print(f"Decision:           {decision.upper()}")
-        print("-" * 50)
-
-        if distance < 2.0:
-            print(f"✅ Reached waypoint {waypoint_index + 1}/{len(target_waypoints)}")
-            waypoint_index += 1
-
-        time.sleep(1)
-
-def run_live():
-    import gpsd
-    gpsd.connect()
-    waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')  # ✅ fixed path
-
-    if not waypoints:
-        print("No GPS waypoints found.")
+def main():
+    try:
+        gpsd.connect()
+        print("✅ Connected to gpsd")
+    except Exception as e:
+        print(f"[ERROR] Failed to connect to gpsd: {e}")
         return
 
-    print("🛰️ Starting Live GPS Mode...\n")
+
+    waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')
+
+    if not waypoints:
+        print("❌ No GPS waypoints loaded.")
+        return
+
+    print("🚗 Starting Autonomous Navigation...\n")
 
     waypoint_index = 0
     prev_lat, prev_lon = None, None
@@ -71,53 +36,43 @@ def run_live():
             packet = gpsd.get_current()
             lat = packet.lat
             lon = packet.lon
-            time_utc = packet.time
-            speed = packet.hspeed
+
+            if prev_lat is None:
+                prev_lat, prev_lon = lat, lon
+                print("⏳ Waiting for movement to calculate heading...")
+                time.sleep(1)
+                continue
 
             target_lat, target_lon = waypoints[waypoint_index]
             distance = haversine(lat, lon, target_lat, target_lon)
+            current_heading = get_current_heading(prev_lat, prev_lon, lat, lon)
+            target_bearing = calculate_bearing(lat, lon, target_lat, target_lon)
+            decision = decide_movement(current_heading, target_bearing)
 
-            if prev_lat is not None:
-                current_heading = get_current_heading(prev_lat, prev_lon, lat, lon)
-                target_bearing = calculate_bearing(lat, lon, target_lat, target_lon)
-                decision = decide_movement(current_heading, target_bearing)
+            print(f"📍 Current: ({lat:.6f}, {lon:.6f})")
+            print(f"🎯 Target:  ({target_lat:.6f}, {target_lon:.6f})")
+            print(f"📏 Distance: {distance:.2f} m")
+            print(f"🧭 Heading:  {current_heading:.2f}°")
+            print(f"🧭 Bearing:  {target_bearing:.2f}°")
+            print(f"🦾 Action:   {decision.upper()}")
+            print("-" * 40)
 
-                print(f"Time: {time_utc}")
-                print(f"Current Position: ({lat:.6f}, {lon:.6f})")
-                print(f"Target Waypoint:  ({target_lat:.6f}, {target_lon:.6f})")
-                print(f"Distance to Target: {distance:.2f} m")
-                print(f"Current Heading:    {current_heading:.2f}°")
-                print(f"Target Bearing:     {target_bearing:.2f}°")
-                print(f"Decision:           {decision.upper()}")
-                print("-" * 50)
-
-                if distance < 2.0:
-                    print(f"✅ Reached waypoint {waypoint_index + 1}/{len(waypoints)}")
-                    waypoint_index += 1
+            if distance < 2.0:
+                print(f"✅ Reached waypoint {waypoint_index + 1}/{len(waypoints)}\n")
+                waypoint_index += 1
 
             prev_lat, prev_lon = lat, lon
             time.sleep(1)
 
         except gpsd.NoFixError:
-            print("No GPS fix yet...")
+            print("⚠️  No GPS fix yet... retrying.")
             time.sleep(1)
         except KeyboardInterrupt:
-            print("\nNavigation stopped by user.")
+            print("\n🛑 Stopped by user.")
             break
-
-def main():
-    print("✅ main() called")
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--simulate":
-        print("✅ Simulation mode selected")
-        simulated_path = load_gps_waypoints('gpslocations/simulated-path.txt')
-        waypoints = load_gps_waypoints('gpslocations/sample-gpslocations.txt')
-        print(f"📍 Simulated path count: {len(simulated_path)}")
-        print(f"📍 Waypoints count: {len(waypoints)}")
-        run_simulation(simulated_path, waypoints)
-    else:
-        print("✅ Live GPS mode selected")
-        run_live()
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            break
 
 if __name__ == "__main__":
     main()
