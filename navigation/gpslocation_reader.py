@@ -50,7 +50,7 @@ def parse_line_to_latlon(line):
     raise ValueError(f"Cannot parse GPS line: {line}")
 
 # Read lines from a .txt file
-with open("sample-gpslocations.txt", "r") as file:
+with open("gpslocations/sample-gpslocations.txt", "r") as file:
     sample_inputs = file.readlines()
 
 
