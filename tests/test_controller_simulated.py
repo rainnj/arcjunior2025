@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from controller import run_simulation, load_gps_waypoints
 
 def test_controller_simulation():
