@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from navigation.distance_bearing import haversine, calculate_bearing
 
 def test_haversine():
