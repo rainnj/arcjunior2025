@@ -3,7 +3,7 @@ import sys
 sys.path.append('./navigation')  # ✅ Allows importing from /navigation
 
 from distance_bearing import haversine, calculate_bearing
-from headinglogic import decide_movement
+from navigation.headinglogic import decide_movement
 
 def load_gps_waypoints(filename):
     with open(filename, 'r') as file:
