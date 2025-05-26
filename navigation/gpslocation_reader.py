@@ -50,9 +50,20 @@ def parse_line_to_latlon(line):
     raise ValueError(f"Cannot parse GPS line: {line}")
 
 # Read lines from a .txt file
-with open("gpslocations/sample-gpslocations.txt", "r") as file:
-    sample_inputs = file.readlines()
-
+def read_sample_gps(filename="gpslocations/sample-gpslocations.txt"):
+    gps_points = []
+    with open(filename, "r") as file:
+        for line in file:
+            line = line.strip()
+            try:
+                lat_str, lon_str = line.split(',')
+                lat, lon = float(lat_str), float(lon_str)
+                print(f"[✓] Parsed: {lat},{lon}")
+                gps_points.append((lat, lon))
+            except:
+                print("[✗] Failed:")
+                print(f" → Cannot parse GPS line: {line}")
+    return gps_points
 
 
 for line in sample_inputs:
