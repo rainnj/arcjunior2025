@@ -66,9 +66,9 @@ def read_sample_gps(filename="gpslocations/sample-gpslocations.txt"):
     return gps_points
 
 
-for line in sample_inputs:
+'''for line in sample_inputs:
     try:
         latlon = parse_line_to_latlon(line)
         print(f"[✓] Parsed: {line} → {latlon}")
     except Exception as e:
-        print(f"[✗] Failed: {line} → {e}")
+        print(f"[✗] Failed: {line} → {e}") '''
