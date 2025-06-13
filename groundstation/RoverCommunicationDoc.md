@@ -82,4 +82,42 @@ Example: `TELEMETRY,25.5,60.0,123,1234567890`
 └── .vscode/                          # VS Code configuration
     ├── arduino.json                  # Arduino settings
     └── c_cpp_properties.json         # C++ configuration
-``` 
+```
+
+## Extra simplified documentation 
+
+
+# Serial.begin(115200); : the serial is a built in arduino communication object and the 115200 is the baud reate bits per second 
+# the const int buffer_size = 64 is saying that we have a box that can hold to 64 letters it saves memory of the command
+# the serial buffer is the same but each number is a small box that only holds one character
+# the int bufferindex = 0 means that it starts at 0 the first position
+# the SetPA level : is to control how strong the radio signal is 
+    low is good for testing purposes but we might need to switch 
+    to high or mid depending on the distance of the rover
+
+# set Channel is like choosing a radio station 76 is the frequencu
+    range is 0-125 both radios must use the same Channel
+
+# Set data rate : how fast data is transmited
+    250KBPS = 250 kb per second
+    also both radios must use the same rate to Working
+
+# enable dynamic paylods : allows sending different sized messages
+
+# setRetries(a, b) : a = if message fails try n times and then b is
+    how many units to wait between setRetries (5,15) are good 
+
+
+## THE MAIN LOOP 
+    this is what is collecting the data from the rover when the serial
+    is avaliable and part 2 checks for the data from rover 
+
+
+## Processing Commands 
+    it stops listening so we can send the command to the rover 
+    to get the data again and starts listening after
+
+
+## Sending the telemetry 
+    then it prints the telemetry that we got 
+
