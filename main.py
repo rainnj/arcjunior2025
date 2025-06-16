@@ -51,7 +51,7 @@ def get_current_heading(prev_lat, prev_lon, curr_lat, curr_lon):
 
 def main():
     port = "COM8"  #we have to change this depending on what port we use
-    baud_rate = 3600 #this too
+    baud_rate = 9600 #this too
 
     try:
         ser = serial.Serial(port, baud_rate, timeout=1)
