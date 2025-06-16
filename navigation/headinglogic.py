@@ -1,4 +1,7 @@
-from .distance_bearing import haversine, calculate_bearing
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from distance_bearing import haversine, calculate_bearing
 
 
 def decide_movement(current_heading, target_bearing, threshold=10):
