@@ -6,6 +6,10 @@ import sys
 pygame.init()
 pygame.joystick.init()
 
+# Create a small window to capture keyboard input
+screen = pygame.display.set_mode((1, 1))
+pygame.display.set_caption("Controller Input")
+
 # Default control values
 lx, ly, rx, ry = 0.0, 0.0, 0.0, 0.0
 controller_connected = False
@@ -30,7 +34,11 @@ if not controller_connected:
 
 try:
     while True:
-        pygame.event.pump()  # Process event queue
+        # Process all events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
         
         # Reset values each frame
         lx, ly, rx, ry = 0.0, 0.0, 0.0, 0.0
