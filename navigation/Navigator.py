@@ -48,7 +48,7 @@ def run_simulation(simulated_positions, target_waypoints):
 def run_live():
     import gpsd
     gpsd.connect()
-    waypoints = load_gps_waypoints('???????????')  # ✅ fixed path
+    waypoints = load_gps_waypoints('gpslocations.sample-gpslocations.txt')  # ✅ fixed path
 
     if not waypoints:
         print("No GPS waypoints found.")
