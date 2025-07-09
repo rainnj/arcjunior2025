@@ -1,0 +1,416 @@
+import time
+import sys
+import serial
+import os
+import logging
+from math import degrees, radians, sin, cos, atan2, sqrt
+from dataclasses import dataclass
+from typing import Tuple, List, Optional
+import smbus2  # For I2C sensors (compass, IMU)
+
+# ======================
+# Configuration Constants
+# ======================
+GPS_PORT = "COM8"  # Linux default, change to COM8 for Windows
+GPS_BAUD = 9600
+COMPASS_I2C_ADDR = 0x1E  # HMC5883L default
+MOTOR_LEFT_PINS = (17, 18, 27)  # (PWM, IN1, IN2)
+MOTOR_RIGHT_PINS = (22, 23, 24)  # (PWM, IN1, IN2)
+OBSTACLE_THRESHOLD = 0.5  # meters
+WAYPOINT_TOLERANCE = 3.0  # meters
+EMERGENCY_STOP_PIN = 5    # GPIO pin for kill switch
+MAX_SPEED = 70            # 70% of max motor speed
+TURN_SPEED = 40           # Speed during turns
+
+# ======================
+# Data Structures
+# ======================
+@dataclass
+class Position:
+    lat: float
+    lon: float
+
+@dataclass
+class SensorData:
+    gps: Optional[Position]
+    compass: Optional[float]  # degrees (0-360)
+    obstacles: List[float]    # distances in meters
+    battery_voltage: float
+
+# ======================
+# Hardware Interfaces
+# ======================
+class Compass:
+    def __init__(self, i2c_addr=COMPASS_I2C_ADDR, bus=1):
+        self.bus = smbus2.SMBus(bus)
+        self.i2c_addr = i2c_addr
+        self._setup()
+
+    def _setup(self):
+        try:
+            # Configuration for HMC5883L
+            self.bus.write_byte_data(self.i2c_addr, 0x00, 0x70)  # 8 samples average
+            self.bus.write_byte_data(self.i2c_addr, 0x01, 0xA0)  # Gain = 5
+            self.bus.write_byte_data(self.i2c_addr, 0x02, 0x00)  # Continuous mode
+        except Exception as e:
+            logging.error(f"Compass init failed: {e}")
+
+    def read_heading(self) -> Optional[float]:
+        try:
+            data = self.bus.read_i2c_block_data(self.i2c_addr, 0x03, 6)
+            x = (data[0] << 8) | data[1]
+            z = (data[2] << 8) | data[3]
+            y = (data[4] << 8) | data[5]
+            
+            heading = atan2(y, x) * (180 / 3.14159265) + 180
+            return heading % 360
+        except Exception as e:
+            logging.warning(f"Compass read error: {e}")
+            return None
+
+class MotorController:
+    def __init__(self):
+        import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+        self.GPIO = GPIO
+        
+        # Setup motor pins
+        self.left_pwm, self.left_in1, self.left_in2 = MOTOR_LEFT_PINS
+        self.right_pwm, self.right_in1, self.right_in2 = MOTOR_RIGHT_PINS
+        
+        for pin in MOTOR_LEFT_PINS + MOTOR_RIGHT_PINS:
+            GPIO.setup(pin, GPIO.OUT)
+        
+        self.pwm_left = GPIO.PWM(self.left_pwm, 1000)
+        self.pwm_right = GPIO.PWM(self.right_pwm, 1000)
+        self.pwm_left.start(0)
+        self.pwm_right.start(0)
+        
+        # Emergency stop button
+        GPIO.setup(EMERGENCY_STOP_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(EMERGENCY_STOP_PIN, GPIO.FALLING, 
+                             callback=self.emergency_stop, bouncetime=200)
+
+    def emergency_stop(self, channel):
+        self.stop()
+        logging.critical("EMERGENCY STOP TRIGGERED")
+        os._exit(1)  # Hard exit
+
+    def set_motor(self, pwm, in1, in2, speed):
+        speed = max(-100, min(100, speed))  # Clamp speed
+        
+        if speed > 0:
+            self.GPIO.output(in1, True)
+            self.GPIO.output(in2, False)
+        elif speed < 0:
+            self.GPIO.output(in1, False)
+            self.GPIO.output(in2, True)
+        else:
+            self.GPIO.output(in1, False)
+            self.GPIO.output(in2, False)
+        
+        pwm.ChangeDutyCycle(abs(speed))
+
+    def move(self, left_speed, right_speed):
+        self.set_motor(self.pwm_left, self.left_in1, self.left_in2, left_speed)
+        self.set_motor(self.pwm_right, self.right_in1, self.right_in2, right_speed)
+
+    def stop(self):
+        self.move(0, 0)
+
+    def cleanup(self):
+        self.stop()
+        self.pwm_left.stop()
+        self.pwm_right.stop()
+        self.GPIO.cleanup()
+
+class UltrasonicSensors:
+    def __init__(self, pins=[(6, 13), (19, 26)]):  # (trigger, echo) pairs
+        import RPi.GPIO as GPIO
+        self.GPIO = GPIO
+        self.sensors = pins
+        
+        for trigger, echo in self.sensors:
+            GPIO.setup(trigger, GPIO.OUT)
+            GPIO.setup(echo, GPIO.IN)
+
+    def get_distance(self, trigger_pin, echo_pin):
+        self.GPIO.output(trigger_pin, True)
+        time.sleep(0.00001)
+        self.GPIO.output(trigger_pin, False)
+
+        pulse_start = time.time()
+        while self.GPIO.input(echo_pin) == 0:
+            if time.time() - pulse_start > 0.1:
+                return None  # Timeout
+            pulse_start = time.time()
+
+        pulse_end = time.time()
+        while self.GPIO.input(echo_pin) == 1:
+            if time.time() - pulse_start > 0.1:
+                return None  # Timeout
+            pulse_end = time.time()
+
+        distance = (pulse_end - pulse_start) * 17150  # cm
+        return distance / 100  # meters
+
+    def read_all(self):
+        return [self.get_distance(t, e) for t, e in self.sensors]
+
+# ======================
+# Navigation Core
+# ======================
+class RoverNavigator:
+    def __init__(self):
+        self.setup_logging()
+        self.motors = MotorController()
+        self.compass = Compass()
+        self.ultrasonic = UltrasonicSensors()
+        self.gps_serial = None
+        self.last_position = None
+        self.battery_check_interval = 60  # seconds
+        self.last_battery_check = 0
+
+        logging.info("Rover systems initializing...")
+        self.connect_gps()
+
+    def setup_logging(self):
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('rover.log'),
+                logging.StreamHandler()
+            ]
+        )
+
+    def connect_gps(self):
+        try:
+            self.gps_serial = serial.Serial(GPS_PORT, GPS_BAUD, timeout=1)
+            logging.info(f"GPS connected on {GPS_PORT}")
+        except Exception as e:
+            logging.error(f"GPS connection failed: {e}")
+
+    def read_sensors(self) -> SensorData:
+        """Poll all sensors and return structured data"""
+        gps_pos = self.read_gps()
+        compass_heading = self.compass.read_heading()
+        obstacles = self.ultrasonic.read_all()
+        
+        # Filter out None values from ultrasonic readings
+        valid_obstacles = [d for d in obstacles if d is not None]
+        
+        # Simulate battery voltage (implement actual ADC reading in production)
+        voltage = 12.0 - (time.time() % 60) / 60  # Simulate slow discharge
+        
+        return SensorData(
+            gps=gps_pos,
+            compass=compass_heading,
+            obstacles=valid_obstacles,
+            battery_voltage=voltage
+        )
+
+    def read_gps(self) -> Optional[Position]:
+        if not self.gps_serial:
+            return None
+            
+        try:
+            line = self.gps_serial.readline().decode('ascii', errors='ignore').strip()
+            if line.startswith('$GPGGA'):
+                parts = line.split(',')
+                if len(parts) > 6 and parts[6] != '0':  # Check fix quality
+                    lat = self.nmea_to_decimal(parts[2], parts[3])
+                    lon = self.nmea_to_decimal(parts[4], parts[5])
+                    if lat and lon:
+                        return Position(lat, lon)
+        except Exception as e:
+            logging.warning(f"GPS read error: {e}")
+        return None
+
+    def nmea_to_decimal(self, coord: str, direction: str) -> Optional[float]:
+        try:
+            deg = float(coord[:2])
+            minutes = float(coord[2:])
+            decimal = deg + minutes / 60
+            if direction in ['S', 'W']:
+                decimal *= -1
+            return decimal
+        except:
+            return None
+
+    def haversine(self, pos1: Position, pos2: Position) -> float:
+        """Calculate distance between two GPS coordinates in meters"""
+        lat1, lon1 = radians(pos1.lat), radians(pos1.lon)
+        lat2, lon2 = radians(pos2.lat), radians(pos2.lon)
+        
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1-a))
+        
+        return 6371000 * c  # Earth radius in meters
+
+    def calculate_bearing(self, start: Position, end: Position) -> float:
+        """Calculate initial bearing between two points in degrees"""
+        lat1, lon1 = radians(start.lat), radians(start.lon)
+        lat2, lon2 = radians(end.lat), radians(end.lon)
+        
+        dlon = lon2 - lon1
+        x = sin(dlon) * cos(lat2)
+        y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
+        
+        bearing = atan2(x, y)
+        bearing = degrees(bearing)
+        return (bearing + 360) % 360
+
+    def avoid_obstacles(self, sensor_data: SensorData) -> Optional[str]:
+        """Return evasive action if obstacles detected"""
+        if not sensor_data.obstacles:
+            return None
+            
+        front_left, front_right = sensor_data.obstacles[:2]
+        
+        if front_left and front_left < OBSTACLE_THRESHOLD:
+            return "RIGHT"
+        if front_right and front_right < OBSTACLE_THRESHOLD:
+            return "LEFT"
+        if all(d < OBSTACLE_THRESHOLD * 1.5 for d in sensor_data.obstacles if d):
+            return "BACKWARD"
+            
+        return None
+
+    def navigate_to_waypoint(self, current: Position, target: Position, heading: float) -> str:
+        """Determine movement command based on position and heading"""
+        distance = self.haversine(current, target)
+        if distance < WAYPOINT_TOLERANCE:
+            return "STOP"
+            
+        bearing = self.calculate_bearing(current, target)
+        heading_error = (bearing - heading) % 360
+        
+        if heading_error > 180:
+            heading_error -= 360
+        
+        if abs(heading_error) < 15:
+            return "FORWARD"
+        elif heading_error > 0:
+            return "RIGHT"
+        else:
+            return "LEFT"
+
+    def execute_movement(self, command: str):
+        """Convert navigation command to motor signals"""
+        if command == "FORWARD":
+            self.motors.move(MAX_SPEED, MAX_SPEED)
+        elif command == "BACKWARD":
+            self.motors.move(-MAX_SPEED/2, -MAX_SPEED/2)
+        elif command == "LEFT":
+            self.motors.move(-TURN_SPEED, TURN_SPEED)
+        elif command == "RIGHT":
+            self.motors.move(TURN_SPEED, -TURN_SPEED)
+        elif command == "STOP":
+            self.motors.stop()
+        else:
+            logging.warning(f"Unknown command: {command}")
+
+    def check_battery(self):
+        """Simulated battery check - implement proper ADC reading in production"""
+        if time.time() - self.last_battery_check > self.battery_check_interval:
+            # In a real system, read actual battery voltage
+            self.last_battery_check = time.time()
+            if self.sensor_data.battery_voltage < 11.0:
+                logging.warning(f"Low battery: {self.sensor_data.battery_voltage:.1f}V")
+                return False
+        return True
+
+    def run(self, waypoints_file: str):
+        """Main navigation loop"""
+        waypoints = self.load_waypoints(waypoints_file)
+        if not waypoints:
+            logging.error("No valid waypoints loaded")
+            return
+            
+        current_wp = 0
+        self.sensor_data = self.read_sensors()
+        
+        while current_wp < len(waypoints) and self.check_battery():
+            target = waypoints[current_wp]
+            
+            # Get updated sensor data
+            new_data = self.read_sensors()
+            if new_data.gps:
+                self.sensor_data = new_data
+            
+            # Check for obstacles first
+            obstacle_action = self.avoid_obstacles(self.sensor_data)
+            if obstacle_action:
+                self.execute_movement(obstacle_action)
+                time.sleep(0.5)
+                continue
+                
+            if not self.sensor_data.gps or not self.sensor_data.compass:
+                logging.warning("Waiting for GPS/compass data...")
+                self.motors.stop()
+                time.sleep(1)
+                continue
+                
+            # Normal navigation
+            action = self.navigate_to_waypoint(
+                self.sensor_data.gps,
+                target,
+                self.sensor_data.compass
+            )
+            
+            logging.info(
+                f"WP {current_wp+1}/{len(waypoints)} | "
+                f"Dist: {self.haversine(self.sensor_data.gps, target):.1f}m | "
+                f"Heading: {self.sensor_data.compass:.0f}° | "
+                f"Action: {action}"
+            )
+            
+            self.execute_movement(action)
+            
+            if action == "STOP":
+                logging.info(f"Reached waypoint {current_wp+1}")
+                current_wp += 1
+                time.sleep(2)  # Pause at waypoint
+                
+            time.sleep(0.1)  # Main loop rate
+            
+        logging.info("Navigation complete")
+        self.motors.stop()
+
+    def load_waypoints(self, filename: str) -> List[Position]:
+        """Load waypoints from file"""
+        waypoints = []
+        try:
+            with open(filename, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    try:
+                        lat, lon = map(float, line.split(','))
+                        waypoints.append(Position(lat, lon))
+                    except ValueError:
+                        continue
+            logging.info(f"Loaded {len(waypoints)} waypoints from {filename}")
+        except Exception as e:
+            logging.error(f"Failed to load waypoints: {e}")
+        return waypoints
+
+# ======================
+# Main Execution
+# ======================
+if __name__ == "__main__":
+    try:
+        rover = RoverNavigator()
+        rover.run("waypoints.txt")
+    except KeyboardInterrupt:
+        logging.info("Shutdown by user")
+    except Exception as e:
+        logging.critical(f"Fatal error: {e}", exc_info=True)
+    finally:
+        rover.motors.cleanup()
+        logging.info("Rover shutdown complete")
