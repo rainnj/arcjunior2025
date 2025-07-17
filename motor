@@ -1,0 +1,195 @@
+#include <SPI.h>
+#include <RF24.h>
+
+// RF24 Pins
+#define CE_PIN 9
+#define CSN_PIN 10
+
+// Motor Pins (non-conflicting PWM configuration)
+const int IN1 = 2;    // Non-PWM
+const int IN2 = 3;    // PWM
+const int ENA = 5;    // PWM
+const int IN3 = 4;    // Non-PWM
+const int IN4 = 7;    // PWM
+const int ENB = 6;    // PWM
+
+// Speed (0-255)
+int speedVal = 200;
+
+// Pipe addresses
+const uint64_t pipes[2] = { 0xF0F0F0F0D2LL, 0xF0F0F0F0E1LL };
+
+// Create RF24 radio object
+RF24 radio(CE_PIN, CSN_PIN);
+
+// Data structure for telemetry
+struct TelemetryData {
+  float temperature;
+  float humidity;
+  int tagId;
+  uint32_t timestamp;
+};
+
+TelemetryData telemetry;
+char commandBuffer[64];
+
+// Command definitions
+enum Command {
+  CMD_FORWARD = 1,
+  CMD_REVERSE = 2,
+  CMD_LEFT = 3,
+  CMD_RIGHT = 4,
+  CMD_STOP = 5,
+  CMD_COAST = 6,
+  CMD_SPEED = 7
+};
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Initialize motor control pins
+  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT); pinMode(ENA, OUTPUT);
+  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT); pinMode(ENB, OUTPUT);
+  
+  // Initialize RF24 radio
+  if (!radio.begin()) {
+    Serial.println("Radio hardware not responding!");
+    while (1);
+  }
+
+  radio.setPALevel(RF24_PA_LOW);
+  radio.setChannel(76);
+  radio.setDataRate(RF24_250KBPS);
+  radio.enableDynamicPayloads();
+  radio.setRetries(5, 15);
+
+  // Set communication pipes
+  radio.openWritingPipe(pipes[1]);
+  radio.openReadingPipe(1, pipes[0]);
+
+  radio.startListening();
+  Serial.println("System ready - Waiting for RF commands...");
+  brake(); // Start in stopped state
+}
+
+void loop() {
+  // Only respond to RF commands
+  if (radio.available()) {
+    handleRadioCommand();
+  }
+}
+
+void handleRadioCommand() {
+  memset(commandBuffer, 0, sizeof(commandBuffer));
+  radio.read(&commandBuffer, sizeof(commandBuffer));
+  
+  // Convert command to uppercase for case-insensitive comparison
+  for (char *p = commandBuffer; *p; ++p) *p = toupper(*p);
+  
+  Serial.print("Command received: ");
+  Serial.println(commandBuffer);
+
+  // Determine command type
+  Command cmd;
+  if (strstr(commandBuffer, "FORWARD")) cmd = CMD_FORWARD;
+  else if (strstr(commandBuffer, "REVERSE")) cmd = CMD_REVERSE;
+  else if (strstr(commandBuffer, "LEFT")) cmd = CMD_LEFT;
+  else if (strstr(commandBuffer, "RIGHT")) cmd = CMD_RIGHT;
+  else if (strstr(commandBuffer, "STOP")) cmd = CMD_STOP;
+  else if (strstr(commandBuffer, "COAST")) cmd = CMD_COAST;
+  else if (strstr(commandBuffer, "SPEED")) {
+    cmd = CMD_SPEED;
+    speedVal = atoi(commandBuffer + 5); // Extract number after "SPEED"
+    speedVal = constrain(speedVal, 0, 255); // Ensure valid PWM value
+    Serial.print("Speed set to: ");
+    Serial.println(speedVal);
+  }
+  else {
+    Serial.println("Unknown command");
+    return;
+  }
+
+  executeCommand(cmd);
+  sendTelemetry();
+}
+
+void executeCommand(Command cmd) {
+  switch(cmd) {
+    case CMD_FORWARD:
+      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
+      analogWrite(ENA, speedVal);
+      analogWrite(ENB, speedVal);
+      Serial.println("Moving FORWARD");
+      break;
+      
+    case CMD_REVERSE:
+      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
+      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
+      analogWrite(ENA, speedVal);
+      analogWrite(ENB, speedVal);
+      Serial.println("Moving REVERSE");
+      break;
+      
+    case CMD_LEFT:
+      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
+      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
+      analogWrite(ENA, speedVal);
+      analogWrite(ENB, speedVal);
+      Serial.println("Turning LEFT");
+      break;
+      
+    case CMD_RIGHT:
+      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
+      analogWrite(ENA, speedVal);
+      analogWrite(ENB, speedVal);
+      Serial.println("Turning RIGHT");
+      break;
+      
+    case CMD_STOP:
+      digitalWrite(IN1, HIGH); digitalWrite(IN2, HIGH);
+      digitalWrite(IN3, HIGH); digitalWrite(IN4, HIGH);
+      analogWrite(ENA, 0);
+      analogWrite(ENB, 0);
+      Serial.println("BRAKING");
+      break;
+      
+    case CMD_COAST:
+      digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
+      digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
+      analogWrite(ENA, 0);
+      analogWrite(ENB, 0);
+      Serial.println("COASTING");
+      break;
+      
+    case CMD_SPEED:
+      // Speed value already set in handleRadioCommand()
+      Serial.print("Speed adjusted to: ");
+      Serial.println(speedVal);
+      break;
+  }
+}
+
+void sendTelemetry() {
+  telemetry.temperature = 25.0 + random(-50, 50) / 10.0;
+  telemetry.humidity = 60.0 + random(-100, 100) / 10.0;
+  telemetry.tagId = 1;
+  telemetry.timestamp = millis();
+
+  radio.stopListening();
+  bool success = radio.write(&telemetry, sizeof(telemetry));
+  if (success) {
+    Serial.println("Telemetry sent.");
+  } else {
+    Serial.println("Telemetry send failed.");
+  }
+  radio.startListening();
+}
+
+void brake() {
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, HIGH);
+  analogWrite(ENA, 0);
+  analogWrite(ENB, 0);
+}
