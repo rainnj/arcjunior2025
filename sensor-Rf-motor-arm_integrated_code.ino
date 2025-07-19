@@ -24,16 +24,10 @@ int speedVal = 200;
 Servo servo1, servo2, servo3;
 int angle1 = 90, angle2 = 90, angle3 = 90;
 
-// ========== RF & STRUCT ========== //
+// ========== RF ========== //
 RF24 radio(CE_PIN, CSN_PIN);
 const uint64_t pipes[2] = { 0xF0F0F0F0D2LL, 0xF0F0F0F0E1LL };
-struct TelemetryData {
-  float temperature;
-  float humidity;
-  int tagId;
-  uint32_t timestamp;
-};
-TelemetryData telemetry;
+char rfBuffer[128];
 
 // ========== SENSOR OBJECTS ========== //
 BH1750 lightMeter;
@@ -105,6 +99,14 @@ void loop() {
   displayBME680();
   displayMQ2();
   delay(1000);
+
+  // Receive RF data
+  if (radio.available()) {
+    char incoming[128];
+    radio.read(&incoming, sizeof(incoming));
+    Serial.print("Received: ");
+    Serial.println(incoming);
+  }
 }
 
 // ========== MOTOR CONTROL ========== //
@@ -192,14 +194,34 @@ void updateServoAngles(char input) {
 
 // ========== TELEMETRY ========== //
 void sendTelemetry() {
-  telemetry.temperature = 25.0 + random(-50, 50) / 10.0;
-  telemetry.humidity = 60.0 + random(-100, 100) / 10.0;
-  telemetry.tagId = 1;
-  telemetry.timestamp = millis();
+  float lux = lightMeter.readLightLevel();
+  bme.performReading();
+  int raw = analogRead(MQ2_PIN);
+  float ppm_CH4 = raw * 0.5;
+  float ppm_LPG = raw * 0.6;
+
+  float lat = gps.location.isValid() ? gps.location.lat() : 0.0;
+  float lng = gps.location.isValid() ? gps.location.lng() : 0.0;
+
+  snprintf(rfBuffer, sizeof(rfBuffer),
+    "T:%.1fC H:%.1f%% P:%.0fhPa G:%.1fk CH4~%.0f LPG~%.0f Lux:%.0f Lat:%.2f Lon:%.2f",
+    bme.temperature,
+    bme.humidity,
+    bme.pressure / 100.0,
+    bme.gas_resistance / 1000.0,
+    ppm_CH4,
+    ppm_LPG,
+    lux,
+    lat,
+    lng
+  );
+
   radio.stopListening();
-  bool success = radio.write(&telemetry, sizeof(telemetry));
-  Serial.println(success ? "Telemetry sent." : "Telemetry failed.");
+  bool success = radio.write(&rfBuffer, strlen(rfBuffer) + 1);
   radio.startListening();
+
+  Serial.println(success ? "RF Telemetry Sent:" : "Telemetry send failed.");
+  Serial.println(rfBuffer);
 }
 
 // ========== SENSOR DISPLAY ========== //
