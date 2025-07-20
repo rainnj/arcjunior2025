@@ -1,23 +1,23 @@
 import pygame
 import time
 import sys
-# import serial  # Disable for testing without hardware
+import serial  # Disable for testing without hardware
 
-# === SERIAL SETUP (DISABLED) ===
-# try:
-#     ser = serial.Serial('COM3', 115200, timeout=1)
-#     time.sleep(2)
-#     print("✅ Serial connection established with transmitter module.")
-# except serial.SerialException as e:
-#     print(f"❌ Could not connect to serial port: {e}")
-#     sys.exit()
+
+try:
+     ser = serial.Serial('COM3', 115200, timeout=1)
+     time.sleep(2)
+     print(" Serial connection established with transmitter module.")
+except serial.SerialException as e:
+     print(f" Could not connect to serial port: {e}")
+     sys.exit()
 
 # === PYGAME SETUP ===
 pygame.init()
 screen = pygame.display.set_mode((200, 100))
 pygame.display.set_caption("WASD Rover Controller (Test Mode)")
 
-print("🚗 Test mode: Press W, A, S, or D to simulate rover movement.")
+print(" Test mode: Press W, A, S, or D to simulate rover movement.")
 print("Release all keys to simulate 'Stop'.")
 
 last_command = None
@@ -47,13 +47,13 @@ try:
 
         if command != last_command:
             # Simulate output instead of sending serial
-            print(f"📤 Simulated Command: {command}       ", end='\r')
+            print(f" Simulated Command: {command}       ", end='\r')
             last_command = command
 
         time.sleep(0.05)
 
 except KeyboardInterrupt:
-    print("\n🛑 Stopped.")
+    print("\n Stopped.")
     # ser.write(b'X\n')  # Skip serial
     # ser.close()
     pygame.quit()
