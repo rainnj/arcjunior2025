@@ -6,7 +6,7 @@ from math import radians, cos, sin, asin, sqrt, atan2, degrees
 
 # SETTINGS
 COMPASS_PORT = "COM12"       # Make sure this matches your Arduino port
-COMPASS_BAUD = 9600
+COMPASS_BAUD = 115200
 LOG_FILE = "gps_navigation_log.csv"
 ARRIVAL_THRESHOLD_METERS = 5
 NAVIGATION_UPDATE_RATE = 1
