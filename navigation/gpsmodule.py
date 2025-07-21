@@ -6,13 +6,18 @@ from math import radians, cos, sin, asin, sqrt, atan2, degrees
 
 # SETTINGS
 COMPASS_PORT = "COM12"
-COMPASS_BAUD = 115200
+COMPASS_BAUD = 9600
 LOG_FILE = "gps_navigation_log.csv"
 ARRIVAL_THRESHOLD_METERS = 5
 NAVIGATION_UPDATE_RATE = 0.25  # 1 second
 
 DESTINATIONS = [
-    (52.475543, 13.458134, "one"),
+    ((52.4764387, 13.4584166), "one"),
+    ((52.47639, 13.45834), "two"),
+    ((52.47639, 13.45834), "three"),
+    ((52.47645, 13.45817), "four"),
+    ((52.47645, 13.45817), "five"),
+    
 ]
 
 # INIT
