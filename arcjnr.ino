@@ -109,9 +109,6 @@ void loop() {
   // --- 3) Command handling from Serial ---
   if (Serial.available() > 0) {
     char c = Serial.read();
-    if (c == '\n' || c == '\r') return;
-     handleCommand(c);
-  }
     Serial.print(F("Cmd: "));
     Serial.println(c);
     switch (c) {
