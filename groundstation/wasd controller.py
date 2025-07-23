@@ -5,7 +5,7 @@ import serial  # Disable for testing without hardware
 
 
 try:
-     ser = serial.Serial('COM3', 115200, timeout=1)
+     ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
      time.sleep(2)
      print(" Serial connection established with transmitter module.")
 except serial.SerialException as e:
