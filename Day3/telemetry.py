@@ -1,0 +1,171 @@
+#include <Wire.h>
+#include <BH1750.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <Adafruit_BMP280.h>
+#include <TinyGPS++.h>
+#include <Servo.h>
+
+// ========== MOTOR DEFINITIONS ========== //
+const int IN1 = 6, IN2 = 7, ENA = 5;
+const int IN3 = 8, IN4 = 9, ENB = 10;
+
+// ========== SENSORS ========== //
+BH1750              lightMeter;
+Adafruit_BNO055     bno(55, 0x28, &Wire);
+Adafruit_BMP280     bmp;
+#define BMP280_I2C_ADDRESS 0x76
+TinyGPSPlus         gps;
+#define GPS_BAUD      9600
+#define MQ2_PIN       A1
+
+// ========== SERVOS ========== //
+Servo servo1, servo2, servo3;
+int angle1 = 90, angle2 = 90, angle3 = 90;
+
+// Timing
+unsigned long lastSensorPrint = 0;
+
+void setup() {
+  Serial.begin(9600);
+  Serial1.begin(GPS_BAUD);
+  Wire.begin();
+  delay(100);
+
+  // --- Motor & servo pins ---
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  servo1.attach(2);
+  servo2.attach(3);
+  servo3.attach(4);
+  servo1.write(angle1);
+  servo2.write(angle2);
+  servo3.write(angle3);
+
+  bmp.setSampling(
+    Adafruit_BMP280::MODE_NORMAL,
+    Adafruit_BMP280::SAMPLING_X2,
+    Adafruit_BMP280::SAMPLING_X16,
+    Adafruit_BMP280::FILTER_X16,
+    Adafruit_BMP280::STANDBY_MS_500
+  );
+
+  pinMode(MQ2_PIN, INPUT);
+
+  Serial.println(F("Setup done. W/A/S/D=drive, F=brake"));
+  Serial.println(F("o/p=servo1, k/l=servo2, n/m=servo3"));
+}
+
+void loop() {
+  // --- Command handling from Serial ---
+  if (Serial.available()) {
+    char c = Serial.read();
+    Serial.print(F("Cmd: "));
+    Serial.println(c);
+    switch (c) {
+      case 'W': case 'w':
+        digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH); analogWrite(ENA, 200);
+        digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH); analogWrite(ENB, 200);
+        Serial.println(F("→ FORWARD")); break;
+      case 'S': case 's':
+        digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);  analogWrite(ENA, 200);
+        digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);  analogWrite(ENB, 200);
+        Serial.println(F("← REVERSE")); break;
+      case 'A': case 'a':
+        digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH); analogWrite(ENA, 200);
+        digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);  analogWrite(ENB, 200);
+        Serial.println(F("↖ TURN LEFT")); break;
+      case 'D': case 'd':
+        digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);  analogWrite(ENA, 200);
+        digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH); analogWrite(ENB, 200);
+        Serial.println(F("↗ TURN RIGHT")); break;
+      case 'F': case 'f':
+        digitalWrite(IN1, LOW);  digitalWrite(IN2, LOW);  analogWrite(ENA, 0);
+        digitalWrite(IN3, LOW);  digitalWrite(IN4, LOW);  analogWrite(ENB, 0);
+        Serial.println(F("■ BRAKE")); break;
+
+      // SERVO 1 ↓/↑ (keys: o/p)
+      case 'o':
+        angle1 = constrain(angle1 - 5, 0, 270);
+        servo1.write(angle1);
+        Serial.print(F("S1:")); Serial.println(angle1);
+        break;
+      case 'p':
+        angle1 = constrain(angle1 + 5, 0, 270);
+        servo1.write(angle1);
+        Serial.print(F("S1:")); Serial.println(angle1);
+        break;
+
+      // SERVO 2 ↓/↑ (keys: k/l)
+      case 'k':
+        angle2 = constrain(angle2 - 5, 0, 180);
+        servo2.write(angle2);
+        Serial.print(F("S2:")); Serial.println(angle2);
+        break;
+      case 'l':
+        angle2 = constrain(angle2 + 5, 0, 180);
+        servo2.write(angle2);
+        Serial.print(F("S2:")); Serial.println(angle2);
+        break;
+
+      // SERVO 3 ↓/↑ (keys: n/m)
+      case 'n':
+        angle3 = constrain(angle3 - 5, 0, 180);
+        servo3.write(angle3);
+        Serial.print(F("S3:")); Serial.println(angle3);
+        break;
+      case 'm':
+        angle3 = constrain(angle3 + 5, 0, 180);
+        servo3.write(angle3);
+        Serial.print(F("S3:")); Serial.println(angle3);
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // --- Telemetry @ 1 Hz ---
+  if (millis() - lastSensorPrint > 1000) {
+    lastSensorPrint = millis();
+
+    // GPS
+    while (Serial1.available()) gps.encode(Serial1.read());
+    String gpsS = gps.location.isValid()
+      ? "Lat=" + String(gps.location.lat(), 6) +
+        ";Lon=" + String(gps.location.lng(), 6)
+      : "WaitingForFix";
+
+    // Light
+    float lux = lightMeter.readLightLevel();
+
+    // IMU orientation
+    sensors_event_t e;
+    bno.getEvent(&e, Adafruit_BNO055::VECTOR_EULER);
+    String ori = String(e.orientation.x,2) + "/" +
+                 String(e.orientation.y,2) + "/" +
+                 String(e.orientation.z,2);
+
+    // BMP280
+    float temp = bmp.readTemperature();
+    float pres = bmp.readPressure() / 100.0F;
+
+    // MQ2
+    int raw = analogRead(MQ2_PIN);
+    float v   = raw * (5.0 / 1023.0);
+
+    // Print telemetry
+    Serial.print(F("GPS:"));     Serial.print(gpsS);
+    Serial.print(F(",LIGHT:"));  Serial.print(lux, 2);
+    Serial.print(F(",ORI:"));    Serial.print(ori);
+    Serial.print(F(",BMP:"));    Serial.print(F("T=")); Serial.print(temp,2);
+                                 Serial.print(F(";P=")); Serial.print(pres,2);
+    Serial.print(F(",MQ2_RAW:"));Serial.print(raw);
+    Serial.print(F(",MQ2_V:"));  Serial.println(v,2);
+  }
+}
