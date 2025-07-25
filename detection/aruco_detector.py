@@ -3,12 +3,32 @@ import cv2.aruco as aruco
 import numpy as np
 
 class ArUcoDetector:
-    def __init__(self, camera_id=0, calib_file=None):
+    def __init__(self, camera_id=1, calib_file=None):
         self.cap = cv2.VideoCapture(camera_id)
         if not self.cap.isOpened():
             raise Exception(f"Cannot open camera with ID {camera_id}")
 
-        self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_5X5_100)
+        # All available ArUco dictionaries to test
+        self.aruco_dicts = [
+            aruco.DICT_4X4_50,
+            aruco.DICT_4X4_100,
+            aruco.DICT_4X4_250,
+            aruco.DICT_4X4_1000,
+            aruco.DICT_5X5_50,
+            aruco.DICT_5X5_100,
+            aruco.DICT_5X5_250,
+            aruco.DICT_5X5_1000,
+            aruco.DICT_6X6_50,
+            aruco.DICT_6X6_100,
+            aruco.DICT_6X6_250,
+            aruco.DICT_6X6_1000,
+            aruco.DICT_7X7_50,
+            aruco.DICT_7X7_100,
+            aruco.DICT_7X7_250,
+            aruco.DICT_7X7_1000,
+            aruco.DICT_ARUCO_ORIGINAL
+        ]
+
         self.parameters = aruco.DetectorParameters()
 
         # Skip calibration if not provided
@@ -31,11 +51,15 @@ class ArUcoDetector:
             frame = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.parameters)
 
-        if ids is not None:
-            aruco.drawDetectedMarkers(frame, corners, ids)
-            return ids[0][0], frame
+        # Try all dictionaries one by one
+        for dict_id in self.aruco_dicts:
+            aruco_dict = aruco.getPredefinedDictionary(dict_id)
+            corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=self.parameters)
+
+            if ids is not None:
+                aruco.drawDetectedMarkers(frame, corners, ids)
+                return ids[0][0], frame  # Return first found tag
         return None, frame
 
     def release(self):
