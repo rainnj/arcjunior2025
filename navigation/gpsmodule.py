@@ -153,6 +153,8 @@ def main():
                         heading_str = f"{latest_heading:.2f}" if latest_heading is not None else "None"
                         command = get_direction_command(bearing, latest_heading)
                         print(f"{command},")
+                        serial_port.write(command.encode())
+
 
                         print(f"({lat:.6f}, {lon:.6f}) -> {dest_name} | {distance:.2f} m | {direction} | Heading: {heading_str}")
                         log_to_csv(lat, lon, date_str, dest_name, distance, bearing, direction, latest_heading)
